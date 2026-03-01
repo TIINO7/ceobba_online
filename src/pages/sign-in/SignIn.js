@@ -125,7 +125,7 @@ export default function SignIn(props) {
         navigate('/dashboard');
       } else if (userData.role === 'teacher') {
         navigate('/teacher');
-      } else if (userData.role === 'student' || userData.role === 'user') {
+      } else if (userData.role === 'student' ) {
         navigate('/students');
       } else {
         // Fallback

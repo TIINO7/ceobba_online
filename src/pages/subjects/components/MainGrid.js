@@ -34,15 +34,7 @@ export default function MainGrid() {
   const [editId, setEditId] = React.useState(null);
   const [editOpen, setEditOpen] = React.useState(false);
   const [notification, setNotification] = React.useState({ open: false, message: '' });
-  const [pricingOpen, setPricingOpen] = React.useState(false);
-  const [pricing, setPricing] = React.useState({
-    one: '',
-    two: '',
-    three: '',
-    four: '',
-    five: '',
-    fivePlus: '',
-  });
+
 
   React.useEffect(() => {
     fetchSubjects();
@@ -120,41 +112,8 @@ export default function MainGrid() {
     }
   };
 
-  // Pricing Handlers
-  const handlePricingOpen = async () => {
-  try {
-    const response = await api.get('/subjects/pricing');
-    setPricing({
-      one: response.data.one,
-      two: response.data.two,
-      three: response.data.three,
-      four: response.data.four,
-      five: response.data.five,
-      fivePlus: response.data.fivePlus,
-    });
-    setPricingOpen(true);
-  } catch (error) {
-    console.error('Error fetching pricing:', error);
-    showNotification('Error fetching pricing');
-  }
-};
-  const handlePricingClose = () => {
-    setPricing({ one: '', two: '', three: '', four: '', five: '', fivePlus: '' });
-    setPricingOpen(false);
-  };
-  const handlePricingChange = (field) => (event) => {
-    setPricing({ ...pricing, [field]: event.target.value });
-  };
-  const handlePricingSubmit = async () => {
-    try {
-      await api.put('/subjects/change_pricing', pricing);
-      handlePricingClose();
-      showNotification('Pricing scheme changed successfully');
-    } catch (error) {
-      console.error('Error changing pricing:', error);
-      showNotification('Error changing pricing');
-    }
-  };
+
+
 
   return (
     <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
@@ -167,9 +126,7 @@ export default function MainGrid() {
             </Button>
           </Grid>
           <Grid item xs={12} sm={4}>
-            <Button fullWidth variant="outlined" size='small' onClick={handlePricingOpen}>
-              Change Pricing Scheme
-            </Button>
+           
           </Grid>
           <Grid item xs={12} sm={4} />
         </Grid>
@@ -212,31 +169,6 @@ export default function MainGrid() {
           </DialogActions>
         </Dialog>
 
-        <Dialog open={pricingOpen} onClose={handlePricingClose}>
-          <DialogTitle>Change Pricing Scheme</DialogTitle>
-          <DialogContent>
-            {['one', 'two', 'three', 'four', 'five', 'fivePlus'].map((key) => (
-              <TextField
-                key={key}
-                margin="dense"
-                label={key === 'fivePlus' ? 'five+' : key}
-                fullWidth
-                variant='standard'
-                value={pricing[key]}
-                onChange={handlePricingChange(key)}
-              />
-            ))}
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handlePricingClose}>Close</Button>
-            <Button
-              onClick={handlePricingSubmit}
-              disabled={Object.values(pricing).some((val) => val === '')}
-            >
-              Submit
-            </Button>
-          </DialogActions>
-        </Dialog>
 
         <TableContainer component={Paper}>
           <Table size='small'>

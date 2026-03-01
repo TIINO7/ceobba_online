@@ -1,23 +1,53 @@
 import './App.css';
 import React from 'react';
-import Dashboard from './pages/dashboard/Dashboard';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './Authentication'; // Import your authentication context :contentReference[oaicite:0]{index=0}&#8203;:contentReference[oaicite:1]{index=1}
+import { AuthProvider, useAuth } from './Authentication'; 
 import SignIn from './pages/sign-in/SignIn';
-// Import any other components for additional routes
+
+// --- ADMIN PAGES ---
+import Dashboard from './pages/dashboard/Dashboard';
 import Student from './pages/students/Student';
 import Payment from './pages/payment/Payment';
 import Register from './pages/register/Register';
 import Users from './pages/users/Users';
 import Subject from './pages/subjects/Subject';
 
-// --- PRIVATE ROUTE WRAPPER ---
-const PrivateRoute = ({ children }) => {
-  // We use 'user' to check if logged in (derived from the Token)
+// --- TEACHER PAGES ---
+import Assessments from './pages/teacher-portal/Assessments';
+import TeacherAnalytics from './pages/teacher-portal/TeacherAnalytics';
+// --- STUDENT PAGES ---
+import Academics from './pages/student-portal/Academics';
+import Finance from './pages/student-portal/Finance';
+
+// --- ROLE-BASED ROUTE GUARD ---
+const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user } = useAuth();
 
-  // If user is null, redirect to login
-  return user ? children : <Navigate to="/login" replace />;
+  // 1. Not logged in? Send to login.
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // 2. Logged in, but wrong role? Send back to root (which redirects to their proper dashboard)
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+
+  // 3. Authorized! Render the page.
+  return children;
+};
+
+// --- DYNAMIC ROOT REDIRECTOR ---
+// When a user logs in and goes to "/", this decides where they should land.
+const RootRedirect = () => {
+  const { user } = useAuth();
+  
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role === 'admin') return <Navigate to="/dashboard" replace />;
+  if (user.role === 'teacher') return <Navigate to="/teacher/grading" replace />;
+  if (user.role === 'student') return <Navigate to="/student/academics" replace />;
+  
+  return <Navigate to="/login" replace />;
 };
 
 function App() {
@@ -28,74 +58,37 @@ function App() {
           {/* Public Route */}
           <Route path="/login" element={<SignIn />} />
 
-          {/* Protected Routes */}
-          
-          {/* Root Route: You can redirect this to /dashboard or /student based on role later */}
-          <Route
-            path="/"
-            element={
-              <PrivateRoute>
-                <Student />
-              </PrivateRoute>
-            }
-          />
-          
-          <Route
-            path="/dashboard"
-            element={
-              <PrivateRoute>
-                <Dashboard />
-              </PrivateRoute>
-            }
-          />
+          {/* Root Redirector */}
+          <Route path="/" element={<RootRedirect />} />
 
-          <Route
-            path="/student"
-            element={
-              <PrivateRoute>
-                <Student />
-              </PrivateRoute>
-            }
-          />
+          {/* ==========================================
+              ADMIN ROUTES
+          ========================================== */}
+          <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['admin']}><Dashboard /></ProtectedRoute>} />
+          <Route path="/student" element={<ProtectedRoute allowedRoles={['admin']}><Student /></ProtectedRoute>} />
+          <Route path="/users" element={<ProtectedRoute allowedRoles={['admin']}><Users /></ProtectedRoute>} />
+          <Route path="/payment" element={<ProtectedRoute allowedRoles={['admin']}><Payment /></ProtectedRoute>} />
+          <Route path="/subject" element={<ProtectedRoute allowedRoles={['admin']}><Subject /></ProtectedRoute>} />
 
-          <Route
-            path="/users"
-            element={
-              <PrivateRoute>
-                <Users />
-              </PrivateRoute>
-            }
-          />
+          {/* ==========================================
+              SHARED ROUTES (Admin & Teacher)
+          ========================================== */}
+          <Route path="/register" element={<ProtectedRoute allowedRoles={['admin', 'teacher']}><Register /></ProtectedRoute>} />
 
-          <Route
-            path="/payment"
-            element={
-              <PrivateRoute>
-                <Payment />
-              </PrivateRoute>
-            }
-          />
+          {/* ==========================================
+              TEACHER ROUTES
+          ========================================== */}
+          <Route path="/teacher/assessments" element={<ProtectedRoute allowedRoles={['admin', 'teacher']}><Assessments /></ProtectedRoute>} />
+         <Route path="/teacher/analytics" element={<ProtectedRoute allowedRoles={['admin', 'teacher']}><TeacherAnalytics /></ProtectedRoute>} />
 
-          <Route
-            path="/register"
-            element={
-              <PrivateRoute>
-                <Register />
-              </PrivateRoute>
-            }
-          />
+          {/* ==========================================
+              STUDENT ROUTES
+          ========================================== */}
+          <Route path="/student/academics" element={<ProtectedRoute allowedRoles={['student']}><Academics /></ProtectedRoute>} />
+          <Route path="/student/finance" element={<ProtectedRoute allowedRoles={['student']}><Finance /></ProtectedRoute>} />
 
-          <Route
-            path="/subject"
-            element={
-              <PrivateRoute>
-                <Subject />
-              </PrivateRoute>
-            }
-          />
-
-          {/* Catch-all: Redirect unknown URLs to Login */}
-          <Route path="*" element={<Navigate to="/login" />} />
+          {/* Catch-all: Redirect unknown URLs */}
+          <Route path="*" element={<Navigate to="/" replace />} />
           
         </Routes>
       </Router>

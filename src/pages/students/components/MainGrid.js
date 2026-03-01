@@ -29,6 +29,7 @@ import SyncIcon from '@mui/icons-material/Sync';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
+import logoImage from '../../../assets/logomini.PNG';
 import api from '../../../api';
 import AddSubjectsModal from './AddSubjectsModal';
 import jsPDF from 'jspdf';
@@ -117,23 +118,104 @@ export default function MainGrid() {
 
   const handleDownloadStudentSheet = async () => {
     try {
-      const response = await api.get('/students/info');
-      const data = response.data;
-      const doc = new jsPDF();
-      doc.setFontSize(18);
-      doc.text('Student Sheet', 14, 16);
-      autoTable(doc, {
-        startY: 20,
-        head: [['Name','Surname','Last Payed','Address','Level','Phone','Guardian Phone 1','Guardian Phone 2','Subjects']],
-        body: data.map(s => [s.first_name, s.surname, s.last_payed, s.address, s.level, s.phone, s.guardian_phone_1, s.guardian_phone_2, s.numberofsubjects]),
-      });
-      showNotification(response.data.message || 'Student sheet downloaded successfully');
-      doc.save('student_sheet.pdf');
+        const response = await api.get('/students/info');
+        
+        // --- SAFETY NET FIX ---
+        // Ensure data is ALWAYS an array, even if the backend returns null or wraps it in an object.
+        let data = [];
+        if (Array.isArray(response.data)) {
+            data = response.data;
+        } else if (response.data && Array.isArray(response.data.data)) {
+            data = response.data.data; // Handles { data: [...] } format
+        } else if (response.data && Array.isArray(response.data.students)) {
+            data = response.data.students; // Handles { students: [...] } format
+        }
+        
+        // Initialize Landscape document
+        const doc = new jsPDF({ orientation: 'landscape' });
+        const pageWidth = doc.internal.pageSize.width;
+        const pageHeight = doc.internal.pageSize.height;
+
+        // Safely Load Logo Image
+        const img = new Image();
+        img.src = logoImage; 
+        
+        await new Promise((resolve) => {
+            img.onload = resolve;
+            img.onerror = resolve; 
+        });
+
+        // Premium Header Layout
+        try { doc.addImage(img, 'PNG', 15, 12, 25, 25); } catch (e) { console.warn("Logo failed to load."); }
+        
+        doc.setFontSize(22); doc.setTextColor(44, 62, 80); doc.setFont(undefined, 'bold');
+        doc.text('CEOBBA INSTITUTE', pageWidth - 15, 22, { align: 'right' });
+        
+        doc.setFontSize(10); doc.setTextColor(127, 140, 141); doc.setFont(undefined, 'normal');
+        doc.text('13421 Kuwadzana Ext, Harare, Zimbabwe', pageWidth - 15, 28, { align: 'right' });
+        doc.text('Phone:  078 627 0643 | 077 237 5519', pageWidth - 15, 33, { align: 'right' });
+        
+        doc.setDrawColor(189, 195, 199); doc.setLineWidth(0.5); doc.line(15, 42, pageWidth - 15, 42);
+
+        // Document Title & Meta Info
+        doc.setFontSize(16); doc.setTextColor(41, 128, 185); doc.setFont(undefined, 'bold');
+        doc.text('STUDENT MASTER DIRECTORY', 15, 52);
+
+        doc.setFontSize(10); doc.setTextColor(44, 62, 80); doc.setFont(undefined, 'normal');
+        doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth - 15, 52, { align: 'right' });
+        
+        // It will now safely read data.length because data is guaranteed to be an array
+        doc.text(`Total Registered Students: ${data.length}`, 15, 58);
+
+        // Professional Table Rendering
+        autoTable(doc, {
+            startY: 65,
+            head: [['First Name', 'Surname', 'Last Paid', 'Address', 'Level', 'Phone', 'Guardian 1', 'Guardian 2', 'Subjects']],
+            body: data.map(s => [
+                s.first_name || '-', 
+                s.surname || '-', 
+                s.last_payed || '-', 
+                s.address || '-',
+                s.level || '-', 
+                s.phone || '-', 
+                s.guardian_phone_1 || '-', 
+                s.guardian_phone_2 || '-', 
+                s.numberofsubjects || '0'
+            ]),
+            theme: 'grid',
+            headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold', halign: 'center' },
+            bodyStyles: { textColor: [44, 62, 80], fontSize: 8, cellPadding: 3, valign: 'middle' },
+            columnStyles: {
+                0: { halign: 'left', fontStyle: 'bold' },
+                1: { halign: 'left', fontStyle: 'bold' },
+                3: { cellWidth: 40 }, 
+                4: { halign: 'center' },
+                8: { halign: 'center' }  
+            }
+        });
+
+        // Professional Footer
+        doc.setDrawColor(189, 195, 199); doc.setLineWidth(0.5); 
+        doc.line(15, pageHeight - 15, pageWidth - 15, pageHeight - 15);
+        doc.setFontSize(9); doc.setTextColor(127, 140, 141);
+        doc.text('Generated by CEOBBA Institute Management System', pageWidth / 2, pageHeight - 8, { align: 'center' });
+
+        doc.save(`Student_Master_Sheet_${new Date().toISOString().split('T')[0]}.pdf`);
+        
+        // If your original code was using showNotification, it goes here safely:
+        if (typeof showNotification === 'function') {
+            showNotification(response.data?.message || 'Student sheet downloaded successfully');
+        }
+
     } catch (error) {
-      //console.error('Error downloading student sheet:', error);
-      showNotification(error.response?.data?.message || 'Failed to download student sheet');
+        console.error('Error downloading student sheet:', error);
+        if (typeof showNotification === 'function') {
+            showNotification(error.response?.data?.message || 'Failed to download student sheet');
+        } else {
+            alert('Failed to download student sheet');
+        }
     }
-  };
+};
   
   const handleOpenModal = (id) => { setSelectedStudentId(id); setModalOpen(true); };  
   const confirmDelete = (id) => { setToDeleteId(id); setConfirmOpen(true); };
@@ -220,8 +302,6 @@ export default function MainGrid() {
     <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' }, p: 3 }}>
       <Grid container spacing={2} alignItems="center" sx={{ mb: 3 }}>
         <Grid item xs={12} sm={2}><Button fullWidth size="small" variant="outlined" onClick={() => setOpenRegisterModal(true)}>Register Student</Button></Grid>
-        <Grid item xs={12} sm={2}><Button fullWidth size="small" variant="outlined" component="label">Upload Excel<input type="file" hidden accept=".xlsx,.xls" onChange={e => setSelectedFile(e.target.files[0])}/></Button></Grid>
-        <Grid item xs={12} sm={2}><Button fullWidth size="small" variant="outlined" onClick={handleUploadStudents} disabled={!selectedFile}>Submit Upload</Button></Grid>
         <Grid item xs={12} sm={2}><Button fullWidth size="small" variant="outlined" onClick={handleDownloadStudentSheet}>Download Sheet</Button></Grid>
         <Grid item xs={12} sm={4}><OutlinedInput size="small" placeholder="Search by Surname…" value={searchSurname} onChange={e => setSearchSurname(e.target.value)} sx={{ flexGrow: 1 }} startAdornment={<InputAdornment position="start"><SearchRoundedIcon fontSize="small"/></InputAdornment>}/></Grid>
       </Grid>

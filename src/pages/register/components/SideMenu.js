@@ -49,7 +49,7 @@ export default function SideMenu() {
             style={{ height: '40px', objectFit: 'contain' }}
           />
           <Typography variant="h5" sx={{ color: 'primary.main', fontWeight: 600 }}>
-            ceobba
+            {user.first_name}
           </Typography>
         </Box>
 

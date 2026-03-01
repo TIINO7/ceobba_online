@@ -2,10 +2,7 @@ import * as React from 'react';
 import { styled } from '@mui/material/styles';
 import Divider, { dividerClasses } from '@mui/material/Divider';
 import Menu from '@mui/material/Menu';
-import {
-  Snackbar,
-  Alert
-} from '@mui/material';
+import { Snackbar, Alert } from '@mui/material';
 import MuiMenuItem from '@mui/material/MenuItem';
 import { paperClasses } from '@mui/material/Paper';
 import { listClasses } from '@mui/material/List';
@@ -31,77 +28,66 @@ const MenuItem = styled(MuiMenuItem)({
 export default function OptionsMenu() {
   const { logout, user } = useAuth();
   const [anchorEl, setAnchorEl] = React.useState(null);
+  
+  // Dialog States
   const [accountOpen, setAccountOpen] = React.useState(false);
   const [pwdDialogOpen, setPwdDialogOpen] = React.useState(false);
-  const [notification, setNotification] = React.useState({ open: false, message: '' });
+  const [notification, setNotification] = React.useState({ open: false, message: '', severity: 'info' });
 
-  const [form, setForm] = React.useState({
-    email: user?.email || '',
-    name: user?.name || '',
-  });
+  // Form States (Only for passwords now)
   const [passwords, setPasswords] = React.useState({ oldPassword: '', newPassword: '' });
   const [error, setError] = React.useState('');
 
   const open = Boolean(anchorEl);
-  const handleClick = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
+  
+  const handleClick = (event) => setAnchorEl(event.currentTarget);
+  const handleClose = () => setAnchorEl(null);
 
-    const showNotification = msg => {
-    setNotification({ open: true, message: msg });
-    setTimeout(() => setNotification({ open: false, message: '' }), 3000);
+  const showNotification = (msg, severity = 'success') => {
+    setNotification({ open: true, message: msg, severity });
   };
-  const handleCloseNotification = () => setNotification({ open: false, message: '' });
+  
+  const handleCloseNotification = () => setNotification({ ...notification, open: false });
 
   const openAccount = () => {
-    setForm({ email: user.email, name: user.name });
+    setError('');
     setAccountOpen(true);
   };
+  
   const closeAccount = () => setAccountOpen(false);
 
-  const handleFormChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
+  const handlePwdChange = (e) => setPasswords({ ...passwords, [e.target.name]: e.target.value });
 
-  const handleSave = async () => {
-    try {
-      const response = await api.put(`/user/edit/${user.id}`, { id: user.id, ...form });
-      user.email = response.data.email;
-      user.name = response.data.name;
-      closeAccount();
-      showNotification('Details change successfully');
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Update failed');
-      showNotification('Update failed');
-    }
-  };
-
-  const handlePwdChange = (e) => {
-    setPasswords({ ...passwords, [e.target.name]: e.target.value });
-  };
-
+// --- CHANGE PASSWORD ---
   const handleChangePassword = async () => {
     try {
-      await api.put('/user/change_password', { id: user.id, old_password: passwords.oldPassword, new_password: passwords.newPassword });
+      setError('');
+      // Removed id: user.id from the payload
+      await api.put('/user/change_password', { 
+          old_password: passwords.oldPassword, 
+          new_password: passwords.newPassword 
+      });
+      
       setPwdDialogOpen(false);
       setPasswords({ oldPassword: '', newPassword: '' });
-      showNotification('password change successfully');
+      showNotification('Password changed successfully', 'success');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Password change failed');
+      const detail = err.response?.data?.detail;
+      let errorMessage = 'Password change failed.';
+      
+      if (typeof detail === 'string') {
+          errorMessage = detail; 
+      } else if (Array.isArray(detail) && detail.length > 0) {
+          errorMessage = detail[0].msg; 
+      }
+      
+      setError(errorMessage);
     }
   };
-
   return (
     <>
       <React.Fragment>
-        <MenuButton
-          aria-label="Open menu"
-          onClick={handleClick}
-          sx={{ borderColor: 'transparent' }}
-        >
+        <MenuButton aria-label="Open menu" onClick={handleClick} sx={{ borderColor: 'transparent' }}>
           <MoreVertRoundedIcon />
         </MenuButton>
         <Menu
@@ -121,8 +107,8 @@ export default function OptionsMenu() {
             My account
           </MenuItem>
           <Divider />
-          <MenuItem sx={{ [`& .${listItemIconClasses.root}`]: { ml: 'auto', minWidth: 0 } }}>
-            <ListItemText onClick={logout}>Logout</ListItemText>
+          <MenuItem onClick={logout} sx={{ [`& .${listItemIconClasses.root}`]: { ml: 'auto', minWidth: 0 } }}>
+            <ListItemText>Logout</ListItemText>
             <ListItemIcon>
               <LogoutRoundedIcon fontSize="small" />
             </ListItemIcon>
@@ -130,80 +116,59 @@ export default function OptionsMenu() {
         </Menu>
       </React.Fragment>
 
-      {/* Account Edit Dialog */}
-      <Dialog open={accountOpen} onClose={closeAccount} fullWidth>
+      {/* Account Details Dialog (Read-Only) */}
+      <Dialog open={accountOpen} onClose={closeAccount} fullWidth maxWidth="xs">
         <DialogTitle>My Account</DialogTitle>
         <DialogContent dividers>
-          {error && <Typography color="error">{error}</Typography>}
-          <TextField
-            margin="dense"
-            label="Email"
-            name="email"
-            variant="standard"
-            value={form.email}
-            onChange={handleFormChange}
-            fullWidth
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Contact an administrator if you need to change your username.
+          </Typography>
+          
+          <TextField 
+             margin="dense" 
+             label="Username" 
+             variant="filled" 
+             value={user?.username || ''} 
+             InputProps={{ readOnly: true }}
+             fullWidth 
           />
-          <TextField
-            margin="dense"
-            label="Name"
-            name="name"
-            variant="standard"
-            value={form.name}
-            onChange={handleFormChange}
-            fullWidth
-          />
-          <TextField
-            margin="dense"
-            label="Password"
-            type="password"
-            variant="standard"
-            value="********"
-            disabled
-            helperText="Click 'Change Password' to update"
-            fullWidth
+          
+          <TextField 
+             margin="dense" 
+             label="Account Role" 
+             variant="filled" 
+             value={user?.role?.toUpperCase() || ''} 
+             InputProps={{ readOnly: true }}
+             fullWidth 
+             sx={{ mt: 2 }}
           />
         </DialogContent>
-        <DialogActions>
-          <Button variant="outlined" onClick={() => setPwdDialogOpen(true)}>Change Password</Button>
-          <Button variant="outlined" onClick={closeAccount}>Cancel</Button>
-          <Button variant="outlined" onClick={handleSave}>Save</Button>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button variant="contained" color="primary" onClick={() => setPwdDialogOpen(true)} sx={{ mr: 'auto' }}>
+            Change Password
+          </Button>
+          <Button onClick={closeAccount}>Close</Button>
         </DialogActions>
       </Dialog>
 
       {/* Change Password Dialog */}
-      <Dialog open={pwdDialogOpen} onClose={() => setPwdDialogOpen(false)} fullWidth>
+      <Dialog open={pwdDialogOpen} onClose={() => setPwdDialogOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>Change Password</DialogTitle>
         <DialogContent dividers>
-          <TextField
-            margin="dense"
-            label="Old Password"
-            type="password"
-            name="oldPassword"
-            variant="standard"
-            value={passwords.oldPassword}
-            onChange={handlePwdChange}
-            fullWidth
-          />
-          <TextField
-            margin="dense"
-            label="New Password"
-            type="password"
-            name="newPassword"
-            variant="standard"
-            value={passwords.newPassword}
-            onChange={handlePwdChange}
-            fullWidth
-          />
+          {error && <Typography color="error" variant="body2" sx={{ mb: 2 }}>{error}</Typography>}
+          <TextField margin="dense" label="Old Password" type="password" name="oldPassword" variant="standard" value={passwords.oldPassword} onChange={handlePwdChange} fullWidth />
+          <TextField margin="dense" label="New Password" type="password" name="newPassword" variant="standard" value={passwords.newPassword} onChange={handlePwdChange} fullWidth />
         </DialogContent>
-        <DialogActions>
-          <Button variant="outlined" onClick={() => setPwdDialogOpen(false)}>Cancel</Button>
-          <Button variant="outlined" onClick={handleChangePassword}>Change</Button>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setPwdDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleChangePassword} disabled={!passwords.oldPassword || !passwords.newPassword}>
+            Update Password
+          </Button>
         </DialogActions>
       </Dialog>
 
-      <Snackbar open={notification.open} autoHideDuration={3000} onClose={handleCloseNotification} anchorOrigin={{ vertical:'top', horizontal:'center' }}>
-        <Alert onClose={handleCloseNotification} severity="info" sx={{ width:'100%' }}>{notification.message}</Alert>
+      <Snackbar open={notification.open} autoHideDuration={4000} onClose={handleCloseNotification} anchorOrigin={{ vertical:'top', horizontal:'center' }}>
+        <Alert onClose={handleCloseNotification} severity={notification.severity} sx={{ width:'100%' }}>{notification.message}</Alert>
       </Snackbar>
     </>
   );

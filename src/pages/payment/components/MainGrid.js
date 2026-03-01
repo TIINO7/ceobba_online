@@ -7,6 +7,7 @@ import {
   TextField, TablePagination, Snackbar, Alert, Typography, Chip, MenuItem,
   Select, FormControl, InputLabel, Tooltip
 } from '@mui/material';
+import logoImage from '../../../assets/logomini.PNG';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import PaymentIcon from '@mui/icons-material/Payment';
@@ -73,24 +74,289 @@ export default function MainGrid() {
   };
 
   // --- PDF GENERATION (Kept same as before) ---
-  const generateBatchInvoicesPDF = (invoices) => { /* ... (Same logic as previous) ... */ };
-  const generateReceiptPDF = (data) => {
-    const doc = new jsPDF();
-    doc.setFontSize(22); doc.setTextColor(41, 128, 185); doc.text('CEOBBA INSTITUTE', 105, 20, null, null, 'center');
-    doc.setFontSize(12); doc.setTextColor(100); doc.text('Contact: 0771683674', 105, 28, null, null, 'center');
-    doc.setFontSize(16); doc.setTextColor(0); doc.text('PAYMENT RECEIPT', 105, 40, null, null, 'center');
-    doc.setFontSize(11); doc.text(`Receipt Date: ${data.date}`, 20, 55); doc.text(`Invoice Ref: #${data.invoiceId} (${data.monthReference})`, 130, 55);
-    doc.text(`Student: ${data.studentName} ${data.studentSurname}`, 20, 65);
-    autoTable(doc, {
-        startY: 75, head: [['Invoice Total', 'Total Paid to Date', 'Remaining Balance']],
-        body: [[`$${data.totalAmount.toFixed(2)}`, `$${data.amountPaid.toFixed(2)}`, `$${data.remainingBalance.toFixed(2)}`]],
-        theme: 'grid', headStyles: { fillColor: [41, 128, 185] }
-    });
-    const finalY = doc.lastAutoTable.finalY + 20;
-    doc.text('Thank you for your payment!', 105, finalY, null, null, 'center');
-    doc.save(`Receipt_${data.studentName}_${data.studentSurname}_Inv${data.invoiceId}.pdf`);
-  };
+  const generateBatchInvoicesPDF = async (invoices) => {
+    if (!invoices || invoices.length === 0) {
+        alert("No invoices to generate.");
+        return;
+    }
 
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
+    
+    // --- 1. Safely Load Logo Image ---
+    const img = new Image();
+    img.src = logoImage; // Make sure logoImage is imported at the top of the file
+    
+    // Wait for the image to load
+    await new Promise((resolve) => {
+        img.onload = resolve;
+        img.onerror = resolve; 
+    });
+
+    // --- 2. Iterate Through Invoices ---
+    invoices.forEach((invoice, index) => {
+        // Create a new page for every invoice after the first one
+        if (index > 0) {
+            doc.addPage();
+        }
+
+        // Extract student info gracefully (handles different possible backend structures)
+        const sName = invoice.studentName || invoice.student?.first_name || 'Student';
+        const sSurname = invoice.studentSurname || invoice.student?.surname || '';
+        const fullName = `${sName} ${sSurname}`.trim();
+        const invRef = invoice.id || 'N/A';
+        const monthRef = invoice.month_reference || new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
+        
+        // Ensure total is safely parsed as a number
+        const totalAmountRaw = invoice.total_amount !== undefined ? invoice.total_amount : invoice.amount;
+        const total = typeof totalAmountRaw === 'number' ? totalAmountRaw : parseFloat(totalAmountRaw || 0);
+
+        // --- 3. Header Section ---
+        try {
+            doc.addImage(img, 'PNG', 15, 15, 25, 25); 
+        } catch (e) {
+            console.warn("Logo could not be loaded into PDF.");
+        }
+
+        // Company Details (Right Aligned)
+        doc.setFontSize(22);
+        doc.setTextColor(44, 62, 80); // Premium dark slate/blue
+        doc.setFont(undefined, 'bold');
+        doc.text('CEOBBA INSTITUTE', pageWidth - 15, 25, { align: 'right' });
+        
+        doc.setFontSize(10);
+        doc.setTextColor(127, 140, 141); // Soft gray
+        doc.setFont(undefined, 'normal');
+        doc.text('13421 Kuwadzana Ext, Harare, Zimbabwe', pageWidth - 15, 31, { align: 'right' });
+        doc.text('Phone:  078 627 0643 | 077 237 5519', pageWidth - 15, 36, { align: 'right' });
+
+        // Header Divider Line
+        doc.setDrawColor(189, 195, 199);
+        doc.setLineWidth(0.5);
+        doc.line(15, 45, pageWidth - 15, 45);
+
+        // --- 4. Invoice Title & Meta Info ---
+        doc.setFontSize(16);
+        doc.setTextColor(41, 128, 185); // Theme Blue
+        doc.setFont(undefined, 'bold');
+        doc.text('TUITION INVOICE', 15, 55);
+
+        // Two-column layout for details
+        doc.setFontSize(11);
+        doc.setTextColor(44, 62, 80);
+        
+        // Left Column: Billed To
+        doc.setFont(undefined, 'bold');
+        doc.text('Billed To:', 15, 65);
+        doc.setFont(undefined, 'normal');
+        doc.text(`Student: ${fullName}`, 15, 72);
+        doc.text(`Grade/Level: ${invoice.student?.level || 'N/A'}`, 15, 78);
+
+        // Right Column: Invoice Details
+        doc.setFont(undefined, 'bold');
+        doc.text('Invoice Details:', pageWidth - 70, 65);
+        doc.setFont(undefined, 'normal');
+        doc.text(`Invoice Ref: #${invRef}`, pageWidth - 70, 72);
+        doc.text(`Billing Period: ${monthRef}`, pageWidth - 70, 78);
+        doc.text(`Issue Date: ${new Date().toLocaleDateString()}`, pageWidth - 70, 84);
+
+        // --- 5. Transaction Table ---
+        autoTable(doc, {
+            startY: 95,
+            head: [['Item Description', 'Period', 'Amount Due']],
+            body: [
+                [
+                    'Monthly Tuition Fee',
+                    monthRef,
+                    `$${total.toFixed(2)}`
+                ]
+            ],
+            theme: 'grid',
+            headStyles: { 
+                fillColor: [41, 128, 185], 
+                textColor: 255, 
+                fontStyle: 'bold',
+                halign: 'center'
+            },
+            bodyStyles: {
+                halign: 'center',
+                textColor: [44, 62, 80],
+                fontSize: 11,
+                cellPadding: 6
+            },
+            columnStyles: {
+                0: { halign: 'left' } 
+            }
+        });
+
+        // --- 6. Summary & Footer ---
+        const finalY = doc.lastAutoTable.finalY + 15;
+
+        // Total Amount Callout Box
+        doc.setFillColor(241, 242, 246);
+        doc.rect(pageWidth - 85, finalY, 70, 22, 'F');
+        doc.setFontSize(12);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(44, 62, 80);
+        doc.text('Total Amount Due:', pageWidth - 80, finalY + 14);
+        
+        doc.setTextColor(231, 76, 60); // Alert Red for owed amount
+        doc.text(`$${total.toFixed(2)}`, pageWidth - 20, finalY + 14, { align: 'right' });
+
+        // Payment Instructions
+        doc.setFontSize(11);
+        doc.setTextColor(127, 140, 141);
+        doc.setFont(undefined, 'italic');
+        doc.text('Please remit payment by the end of the first week of the month.', 15, finalY + 10);
+      
+        // Footer Divider & Copyright
+        doc.setDrawColor(189, 195, 199);
+        doc.setLineWidth(0.5);
+        doc.line(15, pageHeight - 20, pageWidth - 15, pageHeight - 20);
+        
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        doc.text('Generated by CEOBBA Institute Finance System', pageWidth / 2, pageHeight - 13, { align: 'center' });
+    });
+
+    // --- 7. Trigger Download ---
+    // Extract a descriptive name for the file based on the first invoice's month
+    const batchMonthName = invoices[0]?.month_reference ? invoices[0].month_reference.replace(/\s+/g, '_') : new Date().toISOString().slice(0, 7);
+    doc.save(`Batch_Invoices_${batchMonthName}.pdf`);
+};
+ const generateReceiptPDF = async (data) => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+    
+    // --- 1. Safely Load Logo Image ---
+    const img = new Image();
+    img.src = logoImage;
+    
+    // Wait for the image to load to ensure it renders in the PDF
+    await new Promise((resolve) => {
+        img.onload = resolve;
+        img.onerror = resolve; // Continue generating PDF even if image fails to load
+    });
+
+    // --- 2. Header Section ---
+    try {
+        // (image, format, x, y, width, height)
+        doc.addImage(img, 'PNG', 15, 15, 25, 25); 
+    } catch (e) {
+        console.warn("Logo could not be loaded into PDF.");
+    }
+
+    // Company Details (Right Aligned)
+    doc.setFontSize(22);
+    doc.setTextColor(44, 62, 80); // Premium dark slate/blue
+    doc.setFont(undefined, 'bold');
+    doc.text('CEOBBA INSTITUTE', pageWidth - 15, 25, { align: 'right' });
+    
+    doc.setFontSize(10);
+    doc.setTextColor(127, 140, 141); // Soft gray
+    doc.setFont(undefined, 'normal');
+    doc.text('13421 kuwadzana Ext, Harare, Zimbabwe', pageWidth - 15, 31, { align: 'right' });
+    doc.text('Phone:  078 627 0643 | 077 237 5519', pageWidth - 15, 36, { align: 'right' });
+
+    // Header Divider Line
+    doc.setDrawColor(189, 195, 199);
+    doc.setLineWidth(0.5);
+    doc.line(15, 45, pageWidth - 15, 45);
+
+    // --- 3. Receipt Title & Meta Info ---
+    doc.setFontSize(16);
+    doc.setTextColor(41, 128, 185); // Theme Blue
+    doc.setFont(undefined, 'bold');
+    doc.text('OFFICIAL PAYMENT RECEIPT', 15, 55);
+
+    // Two-column layout for details
+    doc.setFontSize(11);
+    doc.setTextColor(44, 62, 80);
+    
+    // Left Column: Billed To
+    doc.setFont(undefined, 'bold');
+    doc.text('Billed To:', 15, 65);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Student: ${data.studentName} ${data.studentSurname}`, 15, 72);
+    doc.text(`Description: ${data.monthReference}`, 15, 78);
+
+    // Right Column: Receipt Details
+    doc.setFont(undefined, 'bold');
+    doc.text('Receipt Details:', pageWidth - 70, 65);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Invoice Ref: #${data.invoiceId}`, pageWidth - 70, 72);
+    doc.text(`Date Recorded: ${data.date}`, pageWidth - 70, 78);
+
+    // --- 4. Transaction Table ---
+    autoTable(doc, {
+        startY: 90,
+        head: [['Description', 'Invoice Total', 'Total Paid to Date', 'Remaining Balance']],
+        body: [
+            [
+                `Tuition - ${data.monthReference}`,
+                `$${data.totalAmount.toFixed(2)}`, 
+                `$${data.amountPaid.toFixed(2)}`, 
+                `$${data.remainingBalance.toFixed(2)}`
+            ]
+        ],
+        theme: 'grid',
+        headStyles: { 
+            fillColor: [41, 128, 185], 
+            textColor: 255, 
+            fontStyle: 'bold',
+            halign: 'center'
+        },
+        bodyStyles: {
+            halign: 'center',
+            textColor: [44, 62, 80],
+            fontSize: 11,
+            cellPadding: 6
+        },
+        columnStyles: {
+            0: { halign: 'left' } 
+        }
+    });
+
+    // --- 5. Summary & Footer ---
+    const finalY = doc.lastAutoTable.finalY + 15;
+
+    // Remaining Balance Callout Box
+    doc.setFillColor(241, 242, 246);
+    doc.rect(pageWidth - 85, finalY, 70, 22, 'F');
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(44, 62, 80);
+    doc.text('Balance Due:', pageWidth - 80, finalY + 14);
+    
+    // Dynamic coloring: Red if owed, Green if fully paid
+    if (data.remainingBalance > 0) {
+        doc.setTextColor(231, 76, 60); 
+    } else {
+        doc.setTextColor(39, 174, 96); 
+    }
+    doc.text(`$${data.remainingBalance.toFixed(2)}`, pageWidth - 20, finalY + 14, { align: 'right' });
+
+    // Thank You Note
+    doc.setFontSize(11);
+    doc.setTextColor(127, 140, 141);
+    doc.setFont(undefined, 'italic');
+    doc.text('Thank you for your payment! If you have any questions,', 15, finalY + 10);
+    doc.text('please feel free to contact us .', 15, finalY + 16);
+
+    // Footer Divider & Copyright
+    const pageHeight = doc.internal.pageSize.height;
+    doc.setDrawColor(189, 195, 199);
+    doc.setLineWidth(0.5);
+    doc.line(15, pageHeight - 20, pageWidth - 15, pageHeight - 20);
+    
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    doc.text('Generated by Ceobba Institute Finance System', pageWidth / 2, pageHeight - 13, { align: 'center' });
+
+    // --- 6. Trigger Download ---
+    doc.save(`Receipt_${data.studentName}_${data.studentSurname}_Inv${data.invoiceId}.pdf`);
+};
   // --- ACTIONS ---
 
   const handleGenerateInvoices = () => {

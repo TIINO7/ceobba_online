@@ -9,8 +9,11 @@ import logo from '../../../assets/logomini.PNG'; // Adjust the path if needed
 import MenuContent from './MenuContent';
 import OptionsMenu from './OptionsMenu';
 import { useAuth } from '../../../Authentication';
+
 function SideMenuMobile({ open, toggleDrawer }) {
-const { user } = useAuth();
+
+  const { user } = useAuth();
+
   return (
     <Drawer
       anchor="right"
@@ -43,7 +46,7 @@ const { user } = useAuth();
                 style={{ height: '30px', objectFit: 'contain' }}
               />
               <Typography variant="h6" sx={{ color: 'primary.main', fontWeight: 500 }}>
-                CEOBBA
+                {user.first_name}
               </Typography>
             </Box>
           </Stack>

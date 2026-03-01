@@ -1,305 +1,253 @@
 import * as React from 'react';
 import Box from '@mui/material/Box';
-import {
-  Button,
-  Grid,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Divider,
-  Paper,
-  Dialog,
-  DialogTitle,
-  Typography,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  IconButton,
-  Stack,
-  Snackbar,
-  Alert,
-  TablePagination
-} from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import api from '../../../api';
-import Copyright from '../internals/components/Copyright';
+import Typography from '@mui/material/Typography';
+import { DataGrid } from '@mui/x-data-grid';
+import CircularProgress from '@mui/material/CircularProgress';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import Stack from '@mui/material/Stack';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
+import api from '../../../api'; 
 
 export default function MainGrid() {
   const [users, setUsers] = React.useState([]);
-  const [openForm, setOpenForm] = React.useState(false);
-  const [formMode, setFormMode] = React.useState('add');
-  const [selectedUser, setSelectedUser] = React.useState({ id: '', email: '', name: '', role: '', password: '' });
-  const [notification, setNotification] = React.useState({ open: false, message: '', severity: 'success' });
-  const [expenses, setExpenses] = React.useState([]);
-  const [categoryFilter, setCategoryFilter] = React.useState('');
-  const [dateFilter, setDateFilter] = React.useState('');
-  const [page, setPage] = React.useState(0);
-  const [rowsPerPage, setRowsPerPage] = React.useState(5);
-  const [openExpenseForm, setOpenExpenseForm] = React.useState(false);
-  const [expenseForm, setExpenseForm] = React.useState({ amount: '', description: '', category: 'salary' });
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+  
+  // Modal State
+  const [openModal, setOpenModal] = React.useState(false);
+  const [formData, setFormData] = React.useState({
+    new_username: '',
+    new_password: '',
+    new_role: 'student',
+    admin_password: ''
+  });
+  const [addingError, setAddingError] = React.useState('');
 
   React.useEffect(() => {
     fetchUsers();
-    fetchExpenses();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  React.useEffect(() => {
-    fetchExpenses();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryFilter, dateFilter]);
 
   const fetchUsers = async () => {
     try {
-      const res = await api.get('/user/users');
-      setUsers(res.data);
-    } catch {
-      showNotification('Failed to fetch users', 'error');
+      setLoading(true);
+      const response = await api.get('/auth/users'); 
+      setUsers(response.data);
+    } catch (err) {
+      console.error("Failed to fetch users:", err);
+      setError("Failed to load users data.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const fetchExpenses = async () => {
+  const handleToggleStatus = async (id, currentStatus) => {
     try {
-      let res;
-      if (dateFilter) {
-        const [year, month] = dateFilter.split('-');
-        res = await api.get(`/expenses/month?year=${year}&month=${month}`);
-      } else {
-        res = await api.get('/expenses/all_expenses');
-      }
-      let data = res.data;
-      if (categoryFilter) data = data.filter(e => e.category === categoryFilter);
-      data.sort((a, b) => new Date(b.date) - new Date(a.date));
-      setExpenses(data);
-    } catch {
-      showNotification('Error loading expenses', 'error');
+      await api.put(`/auth/users/${id}/toggle-status`);
+      setUsers(users.map(u => u.id === id ? { ...u, is_active: !currentStatus } : u));
+    } catch (err) {
+      console.error("Failed to toggle status:", err);
+      alert(err.response?.data?.detail || "Failed to update user status.");
     }
   };
 
-  const showNotification = (message, severity = 'success') => {
-    setNotification({ open: true, message, severity });
-  };
-
-  const handleDeleteUser = async user => {
-    if (user.role === 'admin') {
-      if (!window.confirm('This user is an admin. Are you sure you want to delete this account?')) return;
-    }
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this user? This action cannot be undone.")) return;
+    
     try {
-      await api.delete(`/user/delete/${user.id}`);
-      showNotification('User deleted', 'success');
-      fetchUsers();
-    } catch {
-      showNotification('Delete failed', 'error');
+      await api.delete(`/auth/users/${id}`);
+      setUsers(users.filter(u => u.id !== id));
+    } catch (err) {
+      console.error("Failed to delete user:", err);
+      alert(err.response?.data?.detail || "Failed to delete user.");
     }
   };
 
-  const handleFormSubmit = async () => {
+  const handleAddUser = async () => {
+    setAddingError('');
     try {
-      if (formMode === 'add') {
-        await api.post('/user/register', selectedUser);
-      } else {
-        await api.put(`/user/edit/${selectedUser.id}`, selectedUser);
-      }
-      showNotification('User saved', 'success');
-      fetchUsers();
-      setOpenForm(false);
-    } catch {
-      showNotification('Operation failed', 'error');
+      const response = await api.post('/auth/users', formData);
+      // Immediately push the new user into our table view
+      setUsers([...users, response.data]);
+      setOpenModal(false);
+      // Reset form on success
+      setFormData({ new_username: '', new_password: '', new_role: 'student', admin_password: '' });
+    } catch (err) {
+      setAddingError(err.response?.data?.detail || "Failed to create user.");
     }
   };
 
-  const handleExpenseSubmit = async () => {
-    try {
-      await api.post('/expenses/create_expense', expenseForm);
-      showNotification('Expense added', 'success');
-      setOpenExpenseForm(false);
-      fetchExpenses();
-    } catch {
-      showNotification('Error adding expense', 'error');
-    }
-  };
+  const columns = [
+    { field: 'id', headerName: 'ID', width: 90 },
+    { field: 'username', headerName: 'Username', flex: 1, minWidth: 150 },
+    { 
+      field: 'role', 
+      headerName: 'Role', 
+      width: 150,
+      renderCell: (params) => (
+        <Chip 
+          label={params.value.toUpperCase()} 
+          color={params.value === 'admin' ? 'primary' : 'default'}
+          size="small"
+        />
+      )
+    },
+    {
+      field: 'is_active',
+      headerName: 'Status',
+      width: 120,
+      renderCell: (params) => (
+        <Typography variant="body2" color={params.value ? 'success.main' : 'error.main'} sx={{ mt: 1.5 }}>
+          {params.value ? 'Active' : 'Inactive'}
+        </Typography>
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 200,
+      sortable: false,
+      renderCell: (params) => (
+        <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+          <Button
+            variant="outlined"
+            size="small"
+            color={params.row.is_active ? "warning" : "success"}
+            onClick={() => handleToggleStatus(params.row.id, params.row.is_active)}
+          >
+            {params.row.is_active ? "Deactivate" : "Activate"}
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            color="error"
+            onClick={() => handleDelete(params.row.id)}
+          >
+            Delete
+          </Button>
+        </Stack>
+      ),
+    },
+  ];
 
-  const handleDeleteExpense = async id => {
-    try {
-      await api.delete('/expenses/expense_id', { params: { expense_id: id } });
-      showNotification('Expense deleted', 'success');
-      fetchExpenses();
-    } catch {
-      showNotification('Error deleting expense', 'error');
-    }
-  };
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return <Typography color="error">{error}</Typography>;
+  }
 
   return (
-    <Box sx={{ p: 3, width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-      <Grid container justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Button variant="outlined" size="small" onClick={() => {
-          setFormMode('add');
-          setSelectedUser({ id: '', email: '', name: '', role: 'user', password: '' });
-          setOpenForm(true);
-        }}>Add New User</Button>
-      </Grid>
-      <Typography variant="h4" component="h1" sx={{ color: 'text.primary' }}>Users</Typography>
-      <TableContainer component={Paper} sx={{ mb: 4, mt: 2 }}>
-        <Table size="small">
-          <TableHead sx={{ backgroundColor: '#16d281' }}>
-            <TableRow>
-              <TableCell>Email</TableCell>
-              <TableCell>Name</TableCell>
-              <TableCell>Role</TableCell>
-              <TableCell>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {users.map(user => (
-              <TableRow key={user.id}>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>{user.name}</TableCell>
-                <TableCell>{user.role}</TableCell>
-                <TableCell >
-                   <Stack direction="row" spacing={1}>
-                  <IconButton size="small" onClick={() => {
-                    setFormMode('edit');
-                    setSelectedUser(user);
-                    setOpenForm(true);
-                  }}><EditIcon />
-                  </IconButton>
-                  <IconButton size="small" onClick={() => handleDeleteUser(user)}><DeleteIcon /></IconButton>
-                </Stack>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      <Divider sx={{ my: 4 }} />
-
-      <Typography variant="h4" component="h1" sx={{ color: 'text.primary' }}>Expenses</Typography>
-      <Grid container spacing={2} sx={{ mt: 2 ,mb: 2 }}>
-        <Grid item>
-         <FormControl size="small" sx={{ minWidth: 100 }}>
-            <InputLabel>Category</InputLabel>
-            <Select label="Category" onChange={(e) => setCategoryFilter(e.target.value)}>
-              <MenuItem value="">All</MenuItem>
-              <MenuItem value="salary">Salary</MenuItem>
-              <MenuItem value="stationary">Stationary</MenuItem>
-              <MenuItem value="other">Other</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item>
-          <TextField  type="month" size="small" sx={{minWidth:100}} label="Select Month" InputLabelProps={{ shrink: true }} value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
-        </Grid>
-        <Grid item>
-          <Button variant="outlined" size="small" onClick={() => setOpenExpenseForm(true)}>Add Expense</Button>
-        </Grid>
-      </Grid>
-
-      <TableContainer component={Paper}>
-        <Table size="small">
-          <TableHead sx={{ backgroundColor: '#16d281' }}>
-            <TableRow>
-              <TableCell>Amount</TableCell>
-              <TableCell>Description</TableCell>
-              <TableCell>Category</TableCell>
-              <TableCell>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {expenses.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map(exp => (
-              <TableRow key={exp.id}>
-                <TableCell>${exp.amount}</TableCell>
-                <TableCell>{exp.description}</TableCell>
-                <TableCell>{exp.category}</TableCell>
-                <TableCell>
-                  <Stack direction="row" spacing={1}>
-                  <IconButton size='small' onClick={() => alert(JSON.stringify(exp, null, 2))}><VisibilityIcon /></IconButton>
-                  <IconButton size='small' onClick={() => handleDeleteExpense(exp.id)}><DeleteIcon /></IconButton>
-                </Stack>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        <TablePagination
-          rowsPerPageOptions={[5, 10, 25]}
-          component="div"
-          count={expenses.length}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={(e, newPage) => setPage(newPage)}
-          onRowsPerPageChange={(e) => {
-            setRowsPerPage(parseInt(e.target.value, 10));
-            setPage(0);
+    <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
+      {/* Container holding Title and the Add New User Button above the table */}
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+        <Typography component="h2" variant="h6">
+          System Users
+        </Typography>
+        <Button variant="outlined" color="primary" onClick={() => setOpenModal(true)}>
+          New User
+        </Button>
+      </Stack>
+      
+      <Box sx={{ height: 600, width: '100%' }}>
+        <DataGrid
+          rows={users}
+          columns={columns}
+          initialState={{
+            pagination: { paginationModel: { pageSize: 10 } },
+          }}
+          pageSizeOptions={[10, 20, 50]}
+          disableRowSelectionOnClick
+          disableColumnResize
+          density="comfortable"
+          sx={{
+            boxShadow: 1,
+            borderRadius: 2,
+            p: 1,
+            '& .MuiDataGrid-cell': {
+              borderBottom: 'none',
+            },
           }}
         />
-      </TableContainer>
-
-      <Dialog open={openForm} onClose={() => setOpenForm(false)} fullWidth maxWidth="sm">
-        <DialogTitle>{formMode === 'add' ? 'Add New User' : 'Edit User'}</DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField label="Email" fullWidth value={selectedUser.email} onChange={(e) => setSelectedUser({ ...selectedUser, email: e.target.value })} />
-            <TextField label="Name" fullWidth value={selectedUser.name} onChange={(e) => setSelectedUser({ ...selectedUser, name: e.target.value })} />
-            <FormControl fullWidth>
-              <InputLabel>Role</InputLabel>
-              <Select value={selectedUser.role} label="Role" onChange={(e) => setSelectedUser({ ...selectedUser, role: e.target.value })}>
-                <MenuItem value="user">User</MenuItem>
-                <MenuItem value="admin">Admin</MenuItem>
-              </Select>
-            </FormControl>
-            {formMode === 'add' && <TextField label="Password" type="password" fullWidth value={selectedUser.password} onChange={(e) => setSelectedUser({ ...selectedUser, password: e.target.value })} />}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenForm(false)}>Cancel</Button>
-          <Button onClick={handleFormSubmit} variant="contained">{formMode === 'add' ? 'Register' : 'Save'}</Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={openExpenseForm} onClose={() => setOpenExpenseForm(false)} fullWidth maxWidth="sm">
-        <DialogTitle >Add Expense</DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField label="Amount"  fullWidth value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} />
-            <TextField label="Description" fullWidth value={expenseForm.description} onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} />
-            <FormControl fullWidth>
-              <InputLabel>Category</InputLabel>
-              <Select value={expenseForm.category} label="Category" onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })}>
-                <MenuItem value="salary">Salary</MenuItem>
-                <MenuItem value="stationary">Stationary</MenuItem>
-                <MenuItem value="other">Other</MenuItem>
-              </Select>
-            </FormControl>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenExpenseForm(false)}>Cancel</Button>
-          <Button onClick={handleExpenseSubmit} variant="outlined">Submit</Button>
-        </DialogActions>
-      </Dialog>
-
-      <Snackbar
-        open={notification.open}
-        autoHideDuration={3000}
-        onClose={() => setNotification({ ...notification, open: false })}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-      >
-        <Alert severity={notification.severity} sx={{ width: '100%' }}>{notification.message}</Alert>
-      </Snackbar>
-
-      <Box sx={{ mt: 4 }}>
-        <Copyright sx={{ my: 4 }} />
       </Box>
+
+      {/* Security-Gated Add User Modal */}
+      <Dialog open={openModal} onClose={() => setOpenModal(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>New User</DialogTitle>
+        <DialogContent>
+          {addingError && (
+            <Typography color="error" sx={{ mb: 2 }}>{addingError}</Typography>
+          )}
+          <TextField
+            autoFocus
+            margin="dense"
+            label="New Username"
+            fullWidth
+            variant="outlined"
+            value={formData.new_username}
+            onChange={(e) => setFormData({...formData, new_username: e.target.value})}
+          />
+          <TextField
+            margin="dense"
+            label="New Password"
+            type="password"
+            fullWidth
+            variant="outlined"
+            value={formData.new_password}
+            onChange={(e) => setFormData({...formData, new_password: e.target.value})}
+          />
+          <TextField
+            select
+            margin="dense"
+            label="User Role"
+            fullWidth
+            variant="outlined"
+            value={formData.new_role}
+            onChange={(e) => setFormData({...formData, new_role: e.target.value})}
+          >
+            <MenuItem value="admin">Admin</MenuItem>
+            <MenuItem value="teacher">Teacher</MenuItem>
+            <MenuItem value="student">Student</MenuItem>
+          </TextField>
+          
+          <Box sx={{ mt: 3, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.default' }}>
+            <Typography variant="subtitle2" color="error" gutterBottom>
+              Admin Verification Required
+            </Typography>
+            <TextField
+              margin="dense"
+              label="Your Admin Password"
+              type="password"
+              fullWidth
+              variant="outlined"
+              value={formData.admin_password}
+              onChange={(e) => setFormData({...formData, admin_password: e.target.value})}
+              helperText="Please enter your own password to confirm this action."
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setOpenModal(false)} color="inherit">Cancel</Button>
+          <Button 
+            onClick={handleAddUser} 
+            variant="outlined" 
+            color="primary"
+            disabled={!formData.new_username || !formData.new_password || !formData.admin_password}
+          >
+            Verify & Add User
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
